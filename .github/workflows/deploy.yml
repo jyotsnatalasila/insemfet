@@ -24,40 +24,38 @@ jobs:
       - name: Build project
         run: npm run build
 
-      # Write the raw PEM from secrets into a file
+      # Write the SSH key properly
       - name: Write SSH key
         run: |
           mkdir -p ~/.ssh
-          cat > ~/.ssh/id_rsa << 'EOF'
-          ${{ secrets.EC2_KEY }}
-          EOF
+          echo "${{ secrets.EC2_KEY }}" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
 
-      # Verify SSH key format
-      - name: Verify SSH key
+      # Add EC2 host to known_hosts
+      - name: Setup SSH known_hosts
         run: |
-          ssh-keygen -lf ~/.ssh/id_rsa
+          ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts 2>/dev/null
 
-      # Test SSH connection
-      - name: Test SSH connection
-        env:
-          EC2_HOST: ${{ secrets.EC2_HOST }}
-          EC2_USER: ${{ secrets.EC2_USER }}
-        run: |
-          ssh -i ~/.ssh/id_rsa -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new -v "$EC2_USER@$EC2_HOST" "echo 'SSH connection successful'"
-
-      # Create remote directory if it doesn't exist
+      # Create remote directory with proper permissions
       - name: Create remote directory
         env:
           EC2_HOST: ${{ secrets.EC2_HOST }}
           EC2_USER: ${{ secrets.EC2_USER }}
         run: |
-          ssh -i ~/.ssh/id_rsa -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new "$EC2_USER@$EC2_HOST" "sudo mkdir -p /var/www/html && sudo chown $EC2_USER:$EC2_USER /var/www/html"
+          ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no "$EC2_USER@$EC2_HOST" "sudo mkdir -p /var/www/html && sudo chown $EC2_USER:$EC2_USER /var/www/html"
 
-      # Copy build output to EC2
+      # Deploy files to EC2
       - name: Deploy to EC2
         env:
           EC2_HOST: ${{ secrets.EC2_HOST }}
           EC2_USER: ${{ secrets.EC2_USER }}
         run: |
-          rsync -avz -e "ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=accept-new" ./dist/ "$EC2_USER@$EC2_HOST:/var/www/html/"
+          rsync -avz -e "ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no" ./dist/ "$EC2_USER@$EC2_HOST:/var/www/html/"
+
+      # Verify deployment
+      - name: Verify deployment
+        env:
+          EC2_HOST: ${{ secrets.EC2_HOST }}
+          EC2_USER: ${{ secrets.EC2_USER }}
+        run: |
+          ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no "$EC2_USER@$EC2_HOST" "ls -la /var/www/html/"
