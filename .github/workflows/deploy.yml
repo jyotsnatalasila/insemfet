@@ -24,11 +24,24 @@ jobs:
       - name: Build project
         run: npm run build
 
-      - name: Decode SSH key
+      # Write the raw PEM from secrets into a file
+      - name: Write SSH key
         run: |
-          echo "${{ secrets.EC2_KEY }}" > key.pem
-          chmod 600 key.pem
+          mkdir -p ~/.ssh
+          echo "${{ secrets.EC2_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
 
-      - name: Copy files to EC2
+      # Add EC2 host to known_hosts to prevent SSH prompts
+      - name: Add EC2 to known_hosts
         run: |
-          rsync -avz -e "ssh -i key.pem -o StrictHostKeyChecking=no" ./dist/ ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:/var/www/html/
+          ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts 2>/dev/null
+
+      # Create remote directory if it doesn't exist
+      - name: Create remote directory
+        run: |
+          ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} "sudo mkdir -p /var/www/html && sudo chown ubuntu:ubuntu /var/www/html"
+
+      # Copy build output to EC2
+      - name: Deploy to EC2
+        run: |
+          rsync -avz -e "ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no" ./dist/ ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:/var/www/html/
