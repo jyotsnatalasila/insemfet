@@ -1,17 +1,17 @@
-name: Frontend CI/CD with AWS
+name: Deploy Frontend to AWS S3
 
 on:
   push:
     branches:
-      - main   # or your deployment branch
+      - main   # adjust if you deploy from another branch
 
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
 
     steps:
-      # 1. Checkout code
-      - name: Checkout repository
+      # 1. Checkout repo
+      - name: Checkout code
         uses: actions/checkout@v4
 
       # 2. Setup Node.js
@@ -34,8 +34,15 @@ jobs:
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ secrets.AWS_REGION }}
+          aws-region: eu-north-1   # Stockholm region
 
       # 6. Deploy to S3
       - name: Sync build to S3
         run: aws s3 sync ./dist s3://${{ secrets.AWS_S3_BUCKET }} --delete
+
+      # 7. (Optional) Invalidate CloudFront cache
+      # Uncomment if you use CloudFront in front of S3
+      # - name: Invalidate CloudFront cache
+      #   run: aws cloudfront create-invalidation \
+      #        --distribution-id YOUR_DIST_ID \
+      #        --paths "/*"
